@@ -10,6 +10,79 @@ This repository heavily relies on ensembled architectures such as EfficientNets,
 
 ---
 
+## Executive Summary
+
+Our project focuses on Deepfake Detection using an array of architectures ranging from **EfficientNet ensemble models** on the DFDC benchmark to two highly customized deep learning architectures targeting the 140K Real/Fake dataset: 
+- **Dual-Stream CBAM CNN**
+- **WGC-Net** (Wavelet Guided Cross Attention Network)
+
+### Viva Ready One-Line Summary
+> **We achieved 99.47% accuracy using a Dual-Stream CBAM CNN, but cross-dataset tests revealed a ~41% generalization drop, proving that current deepfake detectors heavily overfit to dataset-specific artifacts.**
+
+---
+
+## Benchmark & Leaderboard Results
+
+### 1. DFDC Benchmark Results (Industry Dataset)
+- **Best Raw Single Model (`tf_efficientnet_b6_ns`)**:
+  - Accuracy: `0.8733`
+  - Log Loss: `0.3157`
+- **Best Meta Model** (Using stacked ensemble with 10 models):
+  - Log Loss: `0.2630`
+- **Final Ensemble Result** (Combined 14 raw + 5 meta-models):
+  - Final Log Loss: `0.2630`
+  - **Rank 14 on DFDC Leaderboard**
+
+### 2. Dual-Stream CBAM CNN Results (140k Dataset)
+**Final Test Results**: `99.47%` Accuracy | `0.0157` Loss
+
+| Class | Precision | Recall | F1 Score |
+|---|---|---|---|
+| Fake | 0.9984 | 0.9910 | 0.9947 |
+| Real | 0.9911 | 0.9984 | 0.9947 |
+
+*Macro Average*: Precision: 0.9947 | Recall: 0.9947 | F1: 0.9947
+
+### 3. WGC-Net Results (140k Dataset)
+- **Final Accuracy**: `97.45%` utilizing customized wavelet-guided cross attention mechanisms.
+
+### 4. Baseline Architecture Comparison
+| Model | Accuracy |
+|---|---|
+| EfficientNet-B0 | 98.19% |
+| **Dual-Stream CBAM** | **99.47%** |
+| WGC-Net | 97.45% |
+
+### 5. Cross-Dataset Generalization Test (Extremely Important)
+When tested on **out-of-distribution, real-world compressed datasets**, a massive performance drop occurs:
+
+| Model | In-Distribution Accuracy | Out-Distribution Architecture |
+|---|---|---|
+| EfficientNet-B0 | 98.19% | ~58% |
+| Dual-Stream CBAM | 99.47% | ~59% |
+| WGC-Net | 97.45% | ~58% |
+
+*Average Performance Drop*: **~41%**
+
+---
+
+## Main Conclusions & Findings
+
+1. **Frequency Features Command Clean Datasets**: Wavelet and Laplacian based models achieved near-perfect performance on highly predictable, uncompressed artifacts.
+2. **Compression Destroys Fake Artifacts**: Real-world H.264 and standard social media compressions effectively wash out high-frequency manipulation clues.
+3. **High Benchmark Accuracy ≠ Real-World Robustness**: A model can predictably score 99%+ in synthetic lab conditions but fail rapidly on unseen or compressed web-crawled videos.
+4. **The Power of Dual-Stream Architecture**: The Dual-Stream CBAM model confidently stood as the premier architecture because it uniquely separated the input data into an **RGB Semantic stream** and a **Laplacian Noise stream**, significantly improving classification robustness.
+
+---
+
+## Future Scope
+- **Vision Transformers** for enhanced localized global contexts.
+- **Cross-generator datasets** integrating classical GANs, Diffusion models, and generic FaceSwap variants.
+- **Real-time spatial video** deepfake detection mechanisms.
+- **Compression-robust training frameworks** capable of handling heavy noise augmentation.
+
+---
+
 ## Key Features
 - **Video & Image Support**: Fully analyzes whole MP4/WebM videos (by extracting face crops frame-by-frame utilizing BlazeFace) or processes single targeted images directly.
 - **Model Ensembling**: Comes thoroughly integrated with older ensemble pipelines (stacking robust models over multiple frames).
