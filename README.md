@@ -7,7 +7,7 @@ This repository heavily relies on ensembled architectures such as EfficientNets,
 > **Kaggle Notebooks (Training & Testing)**
 > - Training Notebook: `https://www.kaggle.com/code/sparshrastogicsv/fork-of-deepfakedetection-training`
 > - Evaluation/Testing Notebook: `https://www.kaggle.com/code/sparshrastogicsv/deepfakedetection`
-
+> - Walkthrough: ESE presentation.pdf
 ---
 
 ## Executive Summary
