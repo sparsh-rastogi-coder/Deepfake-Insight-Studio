@@ -16,7 +16,7 @@ Our project focuses on Deepfake Detection using an array of architectures rangin
 - **Dual-Stream CBAM CNN**
 - **WGC-Net** (Wavelet Guided Cross Attention Network)
 
-### Viva Ready One-Line Summary
+
 > **We achieved 99.47% accuracy using a Dual-Stream CBAM CNN, but cross-dataset tests revealed a ~41% generalization drop, proving that current deepfake detectors heavily overfit to dataset-specific artifacts.**
 
 ---
