@@ -1,4 +1,4 @@
-# Deepfake Insight Studio 🕵️‍♂️🤖
+# Deepfake Insight Studio
 
 Welcome to the **Deepfake Insight Studio**. This is a comprehensive, production-ready full-stack application built to identify deepfakes in both videos and spatial images using state-of-the-art Deep Learning models and Novel deep learning Architectures. 
 
@@ -10,7 +10,7 @@ This repository heavily relies on ensembled architectures such as EfficientNets,
 
 ---
 
-## 🌟 Key Features
+## Key Features
 - **Video & Image Support**: Fully analyzes whole MP4/WebM videos (by extracting face crops frame-by-frame utilizing BlazeFace) or processes single targeted images directly.
 - **Model Ensembling**: Comes thoroughly integrated with older ensemble pipelines (stacking robust models over multiple frames).
 - **Dual-Stream CBAM Integration**: Dedicated pipeline utilizing a customized Dual-Stream Convolutional Block Attention Module architecture, achieving extremely high (~99%) spatial mapping accuracies based on Kaggle training.
@@ -19,7 +19,7 @@ This repository heavily relies on ensembled architectures such as EfficientNets,
 
 ---
 
-## 🏗️ Project Architecture
+## Project Architecture
 The project is split into two independent services that communicate locally.
 
 1. **`inference/` (FastAPI Server)**: 
@@ -35,7 +35,7 @@ The project is split into two independent services that communicate locally.
 
 ---
 
-## ⚙️ Installation & Requirements
+## Installation & Requirements
 
 Ensure that you have `Python 3.10+` installed on your system.
 
@@ -66,7 +66,7 @@ pip install -r django_ui/requirements.txt
 
 ---
 
-## 🚀 How to Run the Application
+## How to Run the Application
 
 Because this uses a detached backend and frontend, you must run **two separate server processes** simultaneously in two separate terminals.
 
@@ -90,7 +90,7 @@ python manage.py runserver 8080
 
 ---
 
-## 📂 Functionality & Using the Dashboard
+## Functionality & Using the Dashboard
 
 Once both servers are running optimally, navigate to `http://localhost:8080` in your web browser.
 
@@ -106,5 +106,5 @@ Once both servers are running optimally, navigate to `http://localhost:8080` in 
 
 ---
 
-## 🛠️ Modifying Pre-Trained Weights
+## Modifying Pre-Trained Weights
 If you choose to retrain the Dual Stream Model externally via Kaggle, locate your output `best_dual_stream_model.pth`. Simply drop and overwrite the weights file within the base-path of the application directory to automatically update the web suite.
