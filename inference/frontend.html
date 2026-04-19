@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Deepfake Detector</title>
+    <!-- Tailwind CSS (for rapid modern styling) -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
+    <!-- React + ReactDOM + Babel (client-side JSX, no build step) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: radial-gradient(circle at top, #1f2937 0, #020617 45%, #000 100%);
+      }
+      .glass {
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+      .neon-border {
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3),
+          0 0 20px rgba(56, 189, 248, 0.35);
+      }
+      .neon-text {
+        text-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+      }
+      .pipeline-glow {
+        box-shadow: 0 0 15px rgba(94, 234, 212, 0.4);
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgba(148, 163, 184, 0.7);
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-slate-100 antialiased">
+    <div id="root" class="min-h-screen flex items-stretch"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+      // When served via FastAPI at /ui, this relative URL will hit the same origin.
+      const API_URL = "/predict";
+
+      const PIPELINE_STEPS = [
+        "Video uploaded",
+        "Extracting frames",
+        "Detecting faces",
+        "Preprocessing images",
+        "Running neural network inference",
+        "Aggregating predictions",
+        "Generating final result",
+      ];
+
+      function classNames(...classes) {
+        return classes.filter(Boolean).join(" ");
+      }
+
+      function formatBytes(bytes) {
+        if (!bytes && bytes !== 0) return "";
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+        if (bytes === 0) return "0 Byte";
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
+      }
+
+      function UploadSection({
+        videoFile,
+        onFileSelected,
+        uploadState,
+        canAnalyze,
+        onAnalyze,
+        reset,
+        videoPreviewUrl,
+      }) {
+        const inputRef = useRef(null);
+
+        const handleDrop = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            onFileSelected(e.dataTransfer.files[0]);
+          }
+        };
+
+        const handleDragOver = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+
+        const estimatedTime =
+          uploadState.progress && uploadState.progress > 0
+            ? `${Math.max(
+                1,
+                Math.round((100 - uploadState.progress) / 20)
+              )}s remaining (approx.)`
+            : "";
+
+        return (
+          <section className="glass neon-border rounded-3xl p-6 lg:p-8 flex flex-col gap-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-400">
+                  Upload
+                </p>
+                <h2 className="text-2xl font-semibold mt-1">
+                  Video Upload & Preview
+                </h2>
+              </div>
+              <button
+                onClick={reset}
+                className="text-xs px-3 py-1.5 rounded-full border border-slate-600/70 hover:border-slate-300/60 text-slate-300 hover:text-white transition"
+              >
+                Analyze another
+              </button>
+            </div>
+
+            <div
+              className={classNames(
+                "mt-2 flex flex-col gap-4 border-2 border-dashed rounded-2xl px-4 py-6 cursor-pointer transition relative overflow-hidden",
+                videoFile
+                  ? "border-emerald-400/60 bg-emerald-400/5"
+                  : "border-slate-600/80 hover:border-sky-400/80 hover:bg-sky-400/5"
+              )}
+              onClick={() => inputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    onFileSelected(e.target.files[0]);
+                  }
+                }}
+              />
+
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-300">
+                    Drag & drop your video here, or{" "}
+                    <span className="text-sky-400 font-medium">
+                      browse from device
+                    </span>
+                    .
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Supported: MP4, WebM, AVI (recommended &lt; 100MB).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-8 px-3 rounded-full bg-slate-900/80 border border-slate-700 text-xs items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-slate-200 font-medium">
+                      Ready for analysis
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {videoFile && (
+                <div className="mt-3 flex flex-col gap-2 text-xs text-slate-300">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate">
+                      <span className="text-slate-400">Selected:</span>{" "}
+                      {videoFile.name}
+                    </span>
+                    <span className="text-slate-400">
+                      {formatBytes(videoFile.size)}
+                    </span>
+                  </div>s
+                  {uploadState.inProgress && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Uploading...</span>
+                        <span>{uploadState.progress}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-sky-400 via-emerald-400 to-sky-400 transition-all"
+                          style={{ width: `${uploadState.progress}%` }}
+                        />
+                      </div>
+                      {estimatedTime && (
+                        <p className="text-[11px] text-slate-500">
+                          {estimatedTime}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {videoPreviewUrl && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-slate-300 mb-1.5">
+                  Video preview
+                </p>
+                <video
+                  src={videoPreviewUrl}
+                  controls
+                  className="w-full rounded-2xl border border-slate-700/80"
+                />
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-wrap items-center gap-3 justify-between">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAnalyze();
+                }}
+                disabled={!canAnalyze}
+                className={classNames(
+                  "relative inline-flex items-center justify-center px-5 py-2.5 rounded-full text-sm font-medium transition",
+                  canAnalyze
+                    ? "bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 text-slate-950 shadow-lg shadow-cyan-500/40 hover:shadow-cyan-500/60"
+                    : "bg-slate-700/60 text-slate-400 cursor-not-allowed"
+                )}
+              >
+                <span className="relative flex items-center gap-2">
+                  {uploadState.inProgress ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Analyze video</span>
+                    </>
+                  )}
+                </span>
+              </button>
+
+              <p className="text-[11px] text-slate-500 max-w-xs">
+                The video is processed locally by your backend. No data is sent
+                to third-party services.
+              </p>
+            </div>
+          </section>
+        );
+      }
+
+      function ProcessingPipeline({ active, currentStepIndex, done }) {
+        return (
+          <section className="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-400">
+                  Pipeline
+                </p>
+                <h2 className="text-2xl font-semibold mt-1">
+                  Model Processing Steps
+                </h2>
+              </div>
+              <span
+                className={classNames(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border",
+                  active
+                    ? "border-emerald-400/60 text-emerald-200 bg-emerald-500/10"
+                    : done
+                    ? "border-sky-400/60 text-sky-200 bg-sky-500/10"
+                    : "border-slate-600/70 text-slate-300 bg-slate-800/60"
+                )}
+              >
+                <span
+                  className={classNames(
+                    "w-2 h-2 rounded-full",
+                    active
+                      ? "bg-emerald-400 animate-pulse"
+                      : done
+                      ? "bg-sky-400"
+                      : "bg-slate-500"
+                  )}
+                />
+                <span>
+                  {active
+                    ? "Analyzing video..."
+                    : done
+                    ? "Processing complete"
+                    : "Waiting for input"}
+                </span>
+              </span>
+            </div>
+
+            <div className="mt-2 grid sm:grid-cols-2 gap-3">
+              {PIPELINE_STEPS.map((step, index) => {
+                const isDone = index < currentStepIndex;
+                const isActive = index === currentStepIndex && active;
+                return (
+                  <div
+                    key={step}
+                    className={classNames(
+                      "relative flex items-center gap-3 px-3.5 py-2.5 rounded-2xl border bg-slate-900/60",
+                      isActive
+                        ? "border-emerald-400/70 pipeline-glow"
+                        : isDone
+                        ? "border-sky-500/60"
+                        : "border-slate-700/70"
+                    )}
+                  >
+                    <div
+                      className={classNames(
+                        "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold",
+                        isActive
+                          ? "bg-emerald-500 text-slate-950"
+                          : isDone
+                          ? "bg-sky-500 text-slate-950"
+                          : "bg-slate-800 text-slate-300"
+                      )}
+                    >
+                      {isDone ? "✓" : index + 1}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium text-slate-100">
+                        {step}
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        {isActive
+                          ? "In progress..."
+                          : isDone
+                          ? "Completed"
+                          : "Pending"}
+                      </span>
+                    </div>
+                    {isActive && (
+                      <span className="absolute -right-1 -top-1 w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      }
+
+      function PredictionResult({ result, analyzing }) {
+        const hasResult = !!result;
+        const label = result?.is_fake ? "Fake" : "Real";
+        const confidence =
+          result && typeof result.probability_fake === "number"
+            ? Math.round(result.probability_fake * 1000) / 10
+            : null;
+
+        const barWidth =
+          confidence != null ? `${Math.min(100, Math.max(0, confidence))}%` : "0%";
+
+        const isFake = result?.is_fake;
+
+        return (
+          <section className="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-fuchsia-400">
+                  Prediction
+                </p>
+                <h2 className="text-2xl font-semibold mt-1">Model Output</h2>
+              </div>
+              {hasResult && (
+                <div className="text-right text-xs text-slate-400">
+                  <div>File analyzed:</div>
+                  <div className="text-slate-200 font-medium truncate max-w-[180px]">
+                    {result.filename || "N/A"}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid md:grid-cols-[1.2fr,1fr] gap-4 items-center">
+              <div className="space-y-3">
+                <div
+                  className={classNames(
+                    "rounded-2xl px-4 py-3 flex items-center justify-between gap-3 border",
+                    hasResult
+                      ? isFake
+                        ? "border-rose-500/70 bg-rose-500/10"
+                        : "border-emerald-500/70 bg-emerald-500/10"
+                      : "border-slate-700/70 bg-slate-900/70"
+                  )}
+                >
+                  <div>
+                    <p className="text-xs text-slate-400">Final verdict</p>
+                    <p
+                      className={classNames(
+                        "text-xl font-semibold neon-text",
+                        hasResult
+                          ? isFake
+                            ? "text-rose-300"
+                            : "text-emerald-300"
+                          : "text-slate-300"
+                      )}
+                    >
+                      {hasResult
+                        ? isFake
+                          ? "Fake"
+                          : "Real"
+                        : analyzing
+                        ? "Analyzing..."
+                        : "Awaiting analysis"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Confidence</p>
+                    <p className="text-lg font-semibold text-slate-100">
+                      {confidence != null ? `${confidence.toFixed(1)}%` : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Real</span>
+                    <span>Fake</span>
+                  </div>
+                  <div className="relative h-3 rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className={classNames(
+                        "absolute inset-y-0 left-0 transition-all",
+                        hasResult
+                          ? isFake
+                            ? "bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
+                            : "bg-gradient-to-r from-emerald-500 to-sky-400"
+                          : "bg-gradient-to-r from-slate-600 to-slate-500"
+                      )}
+                      style={{ width: barWidth }}
+                    />
+                  </div>
+                  {hasResult && (
+                    <p className="text-[11px] text-slate-500">
+                      The bar visualizes the model&apos;s confidence score.
+                      Values near 0% indicate highly likely real content; values
+                      near 100% indicate highly likely deepfake content.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs text-slate-300">
+                <p className="font-medium text-slate-100">
+                  How to interpret this result
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-400">
+                  <li>
+                    The model estimates the probability that the video is a
+                    deepfake.
+                  </li>
+                  <li>
+                    Scores above 50% tilt towards <span className="text-rose-300 font-medium">Fake</span>; below 50% towards{" "}
+                    <span className="text-emerald-300 font-medium">Real</span>.
+                  </li>
+                  <li>
+                    Treat borderline scores (e.g. 40–60%) with caution and
+                    review supporting evidence.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        );
+      }
+
+      function FrameAnalysisGrid({ hasResult }) {
+        const placeholderFrames = [
+          { id: 1, ts: "00:00:01.2", label: "Fake", conf: 0.92 },
+          { id: 2, ts: "00:00:02.8", label: "Fake", conf: 0.85 },
+          { id: 3, ts: "00:00:04.1", label: "Real", conf: 0.34 },
+          { id: 4, ts: "00:00:05.7", label: "Fake", conf: 0.78 },
+        ];
+
+        return (
+          <section className="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-400">
+                  Explainability
+                </p>
+                <h2 className="text-2xl font-semibold mt-1">
+                  Frame-level analysis
+                </h2>
+              </div>
+              <span className="text-[11px] text-slate-400 max-w-xs text-right">
+                This section is currently a{" "}
+                <span className="text-sky-300 font-medium">
+                  placeholder UI
+                </span>{" "}
+                designed for future backend support with per-frame predictions.
+              </span>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300">
+                  Extracted face thumbnails (mock data)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {placeholderFrames.map((f) => (
+                    <div
+                      key={f.id}
+                      className="relative rounded-xl border border-slate-700/80 bg-slate-900/70 p-2 flex flex-col gap-1"
+                    >
+                      <div className="aspect-video rounded-lg bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center text-[10px] text-slate-500">
+                        Frame {f.id} preview
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] mt-1">
+                        <span className="text-slate-300">{f.ts}</span>
+                        <span
+                          className={classNames(
+                            "px-1.5 py-0.5 rounded-full font-medium",
+                            f.label === "Fake"
+                              ? "bg-rose-500/15 text-rose-300 border border-rose-500/40"
+                              : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
+                          )}
+                        >
+                          {f.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Confidence</span>
+                        <span>{Math.round(f.conf * 100)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={classNames(
+                            "h-full transition-all",
+                            f.label === "Fake"
+                              ? "bg-gradient-to-r from-amber-400 to-rose-500"
+                              : "bg-gradient-to-r from-emerald-400 to-sky-400"
+                          )}
+                          style={{ width: `${Math.round(f.conf * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300">
+                  Per-frame contributions (mock data)
+                </p>
+                <div className="overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/80">
+                  <div className="grid grid-cols-3 text-[11px] font-medium text-slate-300 border-b border-slate-700/80">
+                    <div className="px-3 py-2 border-r border-slate-700/80">
+                      Frame
+                    </div>
+                    <div className="px-3 py-2 border-r border-slate-700/80">
+                      Prediction
+                    </div>
+                    <div className="px-3 py-2">Confidence</div>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto scrollbar-thin">
+                    {placeholderFrames.map((f) => (
+                      <div
+                        key={f.id}
+                        className="grid grid-cols-3 text-[11px] text-slate-300 border-b border-slate-800/80 last:border-0"
+                      >
+                        <div className="px-3 py-2 border-r border-slate-800/80">
+                          {f.ts}
+                        </div>
+                        <div className="px-3 py-2 border-r border-slate-800/80">
+                          {f.label}
+                        </div>
+                        <div className="px-3 py-2">
+                          {Math.round(f.conf * 100)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  In the future, this area can display actual per-frame scores
+                  and highlight which frames most strongly influenced the final
+                  verdict.
+                </p>
+              </div>
+            </div>
+          </section>
+        );
+      }
+
+      function ExplanationPanel({ result }) {
+        const hasResult = !!result;
+        const isFake = result?.is_fake;
+
+        const explanation = hasResult
+          ? isFake
+            ? "Several frames exhibit temporal inconsistencies and unnatural facial motion, such as flickering edges around the face and irregular blinking patterns. These are characteristic artifacts of many current deepfake generation pipelines."
+            : "The model found consistent lighting, natural motion, and temporally coherent facial expressions across the evaluated frames. No strong deepfake artifacts were detected above the decision threshold."
+          : "Once the backend exposes a dedicated explanation endpoint, this section can show a natural language summary of the most important visual cues behind the decision.";
+
+        return (
+          <section className="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-violet-400">
+                  Reasoning
+                </p>
+                <h2 className="text-2xl font-semibold mt-1">
+                  Why did the AI decide this?
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-1 space-y-3">
+              <div className="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-4">
+                <p className="text-sm text-slate-200 leading-relaxed">
+                  {explanation}
+                </p>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                This block is built to accommodate richer explanations in the
+                future, such as highlighted video segments, per-attribute
+                confidence scores, and visual overlays showing where artifacts
+                were detected.
+              </p>
+            </div>
+          </section>
+        );
+      }
+
+      function App() {
+        const [videoFile, setVideoFile] = useState(null);
+        const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+
+        const [uploadState, setUploadState] = useState({
+          inProgress: false,
+          progress: 0,
+        });
+        const [analyzing, setAnalyzing] = useState(false);
+        const [pipelineIndex, setPipelineIndex] = useState(0);
+        const [pipelineActive, setPipelineActive] = useState(false);
+        const [pipelineDone, setPipelineDone] = useState(false);
+
+        const [result, setResult] = useState(null);
+        const [error, setError] = useState("");
+
+        const pipelineTimerRef = useRef(null);
+
+        useEffect(() => {
+          return () => {
+            if (pipelineTimerRef.current) {
+              clearInterval(pipelineTimerRef.current);
+            }
+            if (videoPreviewUrl) {
+              URL.revokeObjectURL(videoPreviewUrl);
+            }
+          };
+        }, []);
+
+        const startPipelineAnimation = () => {
+          setPipelineActive(true);
+          setPipelineDone(false);
+          setPipelineIndex(0);
+          if (pipelineTimerRef.current) {
+            clearInterval(pipelineTimerRef.current);
+          }
+          pipelineTimerRef.current = setInterval(() => {
+            setPipelineIndex((prev) => {
+              if (prev >= PIPELINE_STEPS.length - 1) {
+                clearInterval(pipelineTimerRef.current);
+                setPipelineActive(false);
+                setPipelineDone(true);
+                return PIPELINE_STEPS.length - 1;
+              }
+              return prev + 1;
+            });
+          }, 1000);
+        };
+
+        const resetAll = () => {
+          setVideoFile(null);
+          if (videoPreviewUrl) {
+            URL.revokeObjectURL(videoPreviewUrl);
+            setVideoPreviewUrl(null);
+          }
+          setUploadState({ inProgress: false, progress: 0 });
+          setAnalyzing(false);
+          setPipelineIndex(0);
+          setPipelineActive(false);
+          setPipelineDone(false);
+          setResult(null);
+          setError("");
+        };
+
+        const handleFileSelected = (file) => {
+          setVideoFile(file);
+          setError("");
+          if (videoPreviewUrl) {
+            URL.revokeObjectURL(videoPreviewUrl);
+          }
+          const url = URL.createObjectURL(file);
+          setVideoPreviewUrl(url);
+        };
+
+        const handleAnalyze = async () => {
+          if (!videoFile || uploadState.inProgress || analyzing) return;
+
+          setError("");
+          setResult(null);
+
+          setUploadState({ inProgress: true, progress: 5 });
+          setAnalyzing(true);
+          startPipelineAnimation();
+
+          const formData = new FormData();
+          formData.append("file", videoFile);
+
+          const fakeProgressTimer = setInterval(() => {
+            setUploadState((prev) => {
+              if (!prev.inProgress) return prev;
+              const next = Math.min(prev.progress + 7, 90);
+              return { ...prev, progress: next };
+            });
+          }, 350);
+
+          try {
+            const res = await fetch(API_URL, {
+              method: "POST",
+              body: formData,
+            });
+
+            clearInterval(fakeProgressTimer);
+            setUploadState({ inProgress: false, progress: 100 });
+
+            const text = await res.text();
+            let json;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              throw new Error(`Non-JSON response from server: ${text}`);
+            }
+
+            if (!res.ok) {
+              const detail = json.detail || "Unknown server error.";
+              throw new Error(detail);
+            }
+
+            setResult(json);
+          } catch (err) {
+            console.error(err);
+            setError(String(err));
+            setPipelineActive(false);
+            setPipelineDone(false);
+          } finally {
+            setAnalyzing(false);
+            setUploadState((prev) => ({ ...prev, inProgress: false }));
+          }
+        };
+
+        return (
+          <div className="w-full max-w-6xl mx-auto px-4 py-6 lg:py-10 flex flex-col gap-6">
+            <header className="flex flex-wrap items-center justify-between gap-4 mb-2">
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center neon-border">
+                  <span className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-sky-500/30 via-cyan-400/20 to-fuchsia-500/30 blur-md" />
+                  <span className="relative text-lg font-bold text-sky-100">
+                    DF
+                  </span>
+                </div>
+                <div>
+                  <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-slate-50">
+                    Deepfake Insight Studio
+                  </h1>
+                  <p className="text-xs md:text-sm text-slate-400">
+                    Upload a video, follow the processing pipeline, and explore
+                    how the AI reaches its verdict.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span className="hidden sm:inline-block">
+                  Backend status:
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 border border-emerald-500/40 text-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  API connected (local)
+                </span>
+              </div>
+            </header>
+
+            {error && (
+              <div className="glass border border-rose-500/70 rounded-2xl px-4 py-3 text-xs text-rose-100 flex items-start gap-3">
+                <span className="mt-[2px]">⚠️</span>
+                <div>
+                  <p className="font-medium mb-0.5">
+                    Something went wrong during analysis
+                  </p>
+                  <p className="text-rose-200/90 break-words">{error}</p>
+                </div>
+              </div>
+            )}
+
+            <main className="grid lg:grid-cols-[1.1fr,1.1fr] gap-6 items-start">
+              <div className="space-y-5">
+                <UploadSection
+                  videoFile={videoFile}
+                  onFileSelected={handleFileSelected}
+                  uploadState={uploadState}
+                  canAnalyze={!!videoFile && !uploadState.inProgress}
+                  onAnalyze={handleAnalyze}
+                  reset={resetAll}
+                  videoPreviewUrl={videoPreviewUrl}
+                />
+
+                <ProcessingPipeline
+                  active={pipelineActive || analyzing}
+                  currentStepIndex={pipelineIndex}
+                  done={pipelineDone && !!result}
+                />
+              </div>
+
+              <div className="space-y-5">
+                <PredictionResult result={result} analyzing={analyzing} />
+                <FrameAnalysisGrid hasResult={!!result} />
+                <ExplanationPanel result={result} />
+              </div>
+            </main>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>

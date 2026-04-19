@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../inference"
+		},
+		{
+			"path": "../mock_test"
+		},
+		{
+			"path": "../pipeline"
+		}
+	]
+}

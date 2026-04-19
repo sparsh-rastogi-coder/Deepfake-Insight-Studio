@@ -1,0 +1,325 @@
+﻿{% extends "ui/base.html" %}
+{% block title %}Upload & Predict | Deepfake Insight Studio{% endblock %}
+
+{% block content %}
+<main class="grid lg:grid-cols-[1.2fr,0.8fr] gap-6 items-start">
+  <section class="glass neon-border rounded-3xl p-6 lg:p-8 flex flex-col gap-5">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <p class="text-sm font-medium uppercase tracking-[0.2em] text-sky-400">Upload</p>
+        <h2 class="text-2xl font-semibold mt-1">Upload & Predict</h2>
+      </div>
+      <button id="resetBtn"
+        class="text-xs px-3 py-1.5 rounded-full border border-slate-600/70 hover:border-slate-300/60 text-slate-300 hover:text-white transition">
+        Reset
+      </button>
+    </div>
+
+    <div id="dropzone"
+      class="mt-2 flex flex-col gap-4 border-2 border-dashed rounded-2xl px-4 py-6 cursor-pointer transition relative overflow-hidden border-slate-600/80 hover:border-sky-400/80 hover:bg-sky-400/5">
+      <input id="fileInput" type="file" accept="video/*" class="hidden" />
+      <input id="imageInput" type="file" accept="image/*" class="hidden" />
+      <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+        <div>
+          <p id="dropzoneHint" class="text-sm text-slate-300">
+            Drag & drop your video here, or <span class="text-sky-400 font-medium">browse</span>.
+          </p>
+          <p id="dropzoneFormats" class="text-xs text-slate-400 mt-1">Supported: MP4, WebM, AVI.</p>
+        </div>
+      </div>
+
+      <div id="fileMeta" class="hidden mt-2 text-xs text-slate-300"></div>
+      <div id="uploadProgress" class="hidden space-y-1">
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span>Uploading...</span>
+          <span id="uploadPct">0%</span>
+        </div>
+        <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+          <div id="uploadBar" class="h-full bg-gradient-to-r from-sky-400 via-emerald-400 to-sky-400 transition-all"
+            style="width: 0%"></div>
+        </div>
+        <p id="uploadEta" class="text-[11px] text-slate-500"></p>
+      </div>
+    </div>
+
+    <div id="previewWrap" class="hidden">
+      <p class="text-xs font-medium text-slate-300 mb-1.5">Preview</p>
+      <video id="videoPreview" controls class="w-full rounded-2xl border border-slate-700/80"></video>
+      <img id="imagePreview" class="hidden w-full rounded-2xl border border-slate-700/80 object-contain max-h-64" alt="Image preview" />
+    </div>
+
+
+    <div class="flex flex-wrap items-center gap-3 justify-between">
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="text-xs text-slate-400">Frames</label>
+        <input id="framesInput" type="number" min="1" placeholder="32"
+          class="w-24 rounded-xl bg-slate-950/60 border border-slate-700/80 text-slate-200 text-sm px-3 py-2" />
+        <label class="ml-4 flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+          <input id="useDualStream" type="checkbox" class="rounded border-slate-700/80 bg-slate-950/60 text-sky-500 focus:ring-sky-500/50 w-4 h-4 cursor-pointer" />
+          <span class="font-medium text-slate-300">Use Dual-Stream Model</span>
+        </label>
+        <!-- Image mode toggle â€” only visible when dual stream is checked -->
+        <label id="imageModeLabelWrap" class="hidden ml-2 flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+          <input id="imageModeToggle" type="checkbox" class="rounded border-slate-700/80 bg-slate-950/60 text-fuchsia-500 focus:ring-fuchsia-500/50 w-4 h-4 cursor-pointer" />
+          <span class="font-medium text-fuchsia-300">Upload Image instead</span>
+        </label>
+      </div>
+      <button id="analyzeBtn"
+        class="relative inline-flex items-center justify-center px-5 py-2.5 rounded-full text-sm font-medium transition bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 text-slate-950 shadow-lg shadow-cyan-500/40 hover:shadow-cyan-500/60">
+        <span id="analyzeBtnLabel">Analyze video</span>
+      </button>
+    </div>
+
+    <div id="errorBox" class="hidden glass border border-rose-500/70 rounded-2xl px-4 py-3 text-xs text-rose-100"></div>
+  </section>
+
+  <section class="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+    <p class="text-sm font-medium uppercase tracking-[0.2em] text-fuchsia-400">Result</p>
+    <h3 class="text-xl font-semibold">Latest prediction</h3>
+    <div id="resultBox" class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-4 text-sm text-slate-200">
+      Upload a video and click <span class="text-sky-300 font-medium">Analyze video</span>.
+    </div>
+    <div class="text-[11px] text-slate-500">
+      After a successful prediction, open <span class="text-slate-200 font-medium">Pipeline & Explainability</span> or
+      <span class="text-slate-200 font-medium">AI Reasoning</span> from the top navigation.
+    </div>
+  </section>
+</main>
+
+<script>
+  // â”€â”€ Element refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const dropzone          = document.getElementById("dropzone");
+  const fileInput         = document.getElementById("fileInput");
+  const imageInput        = document.getElementById("imageInput");
+  const previewWrap       = document.getElementById("previewWrap");
+  const videoPreview      = document.getElementById("videoPreview");
+  const imagePreview      = document.getElementById("imagePreview");
+  const dropzoneHint      = document.getElementById("dropzoneHint");
+  const dropzoneFormats   = document.getElementById("dropzoneFormats");
+  const framesInput       = document.getElementById("framesInput");
+  const useDualStream     = document.getElementById("useDualStream");
+  const imageModeLabelWrap= document.getElementById("imageModeLabelWrap");
+  const imageModeToggle   = document.getElementById("imageModeToggle");
+  const analyzeBtnLabel   = document.getElementById("analyzeBtnLabel");
+  const analyzeBtn        = document.getElementById("analyzeBtn");
+  const resetBtn          = document.getElementById("resetBtn");
+  const resultBox         = document.getElementById("resultBox");
+  const errorBox          = document.getElementById("errorBox");
+  const fileMeta          = document.getElementById("fileMeta");
+  const uploadProgress    = document.getElementById("uploadProgress");
+  const uploadPct         = document.getElementById("uploadPct");
+  const uploadBar         = document.getElementById("uploadBar");
+  const uploadEta         = document.getElementById("uploadEta");
+
+  let selectedFile = null;
+  let previewUrl   = null;
+  let isImageMode  = false;
+
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function getCookie(name) {
+    const v = `; ${document.cookie}`;
+    const p = v.split(`; ${name}=`);
+    if (p.length === 2) return p.pop().split(";").shift();
+    return null;
+  }
+
+  function formatBytes(b) {
+    const s = ["Bytes","KB","MB","GB"];
+    if (!b && b !== 0) return "";
+    if (b === 0) return "0 Byte";
+    const i = Math.floor(Math.log(b) / Math.log(1024));
+    return (b / Math.pow(1024, i)).toFixed(2) + " " + s[i];
+  }
+
+  function setError(msg) {
+    if (!msg) { errorBox.classList.add("hidden"); errorBox.textContent = ""; return; }
+    errorBox.classList.remove("hidden");
+    errorBox.textContent = msg;
+  }
+
+  function setResult(json) {
+    window.sessionStorage.setItem("dfdc:lastResult", JSON.stringify(json));
+    const isFake     = json.is_fake;
+    const confidence = (json.probability_fake * 100).toFixed(1);
+    const badgeColor = isFake
+      ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+    const label = isFake ? "FAKE" : "REAL";
+    const mediaType = json.frames_used === 1 ? "Image" : "Video";
+    resultBox.innerHTML = `
+    <div class="flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div class="text-xs text-slate-400 uppercase tracking-wider">${mediaType}</div>
+        <div class="text-xs px-3 py-1 rounded-full border ${badgeColor}">${label}</div>
+      </div>
+      <div class="text-lg font-semibold text-slate-100 truncate">${json.filename}</div>
+      <div class="space-y-2">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>Fake probability</span>
+          <span class="text-slate-200 font-medium">${confidence}%</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-sky-400 via-cyan-400 to-emerald-400" style="width:${confidence}%"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <div class="rounded-xl border border-slate-700/70 bg-slate-950/60 p-3">
+          <div class="text-[11px] text-slate-400">${json.frames_used === 1 ? 'Images analyzed' : 'Frames analyzed'}</div>
+          <div class="text-sm font-medium text-slate-100">${json.frames_used}</div>
+        </div>
+        <div class="rounded-xl border border-slate-700/70 bg-slate-950/60 p-3">
+          <div class="text-[11px] text-slate-400">Model confidence</div>
+          <div class="text-sm font-medium text-slate-100">${confidence}%</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // â”€â”€ Mode switching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function applyMode() {
+    isImageMode = useDualStream.checked && imageModeToggle.checked;
+    if (isImageMode) {
+      dropzoneHint.innerHTML = 'Drag &amp; drop your <strong class="text-fuchsia-400">image</strong> here, or <span class="text-sky-400 font-medium">browse</span>.';
+      dropzoneFormats.textContent = "Supported: JPG, PNG, WebP, BMP.";
+      analyzeBtnLabel.textContent = "Analyze image";
+      framesInput.closest("label") && (framesInput.parentElement.style.display = "none");
+      framesInput.style.display = "none";
+      framesInput.previousElementSibling && (framesInput.previousElementSibling.style.display="none");
+    } else {
+      dropzoneHint.innerHTML = 'Drag &amp; drop your video here, or <span class="text-sky-400 font-medium">browse</span>.';
+      dropzoneFormats.textContent = "Supported: MP4, WebM, AVI.";
+      analyzeBtnLabel.textContent = "Analyze video";
+      framesInput.style.display = "";
+      framesInput.previousElementSibling && (framesInput.previousElementSibling.style.display="");
+    }
+    // Reset file selection when mode changes
+    resetAll();
+  }
+
+  useDualStream.addEventListener("change", () => {
+    imageModeLabelWrap.classList.toggle("hidden", !useDualStream.checked);
+    if (!useDualStream.checked) {
+      imageModeToggle.checked = false;
+    }
+    applyMode();
+  });
+
+  imageModeToggle.addEventListener("change", applyMode);
+
+  // â”€â”€ File selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function resetAll() {
+    selectedFile = null;
+    fileInput.value = "";
+    imageInput.value = "";
+    setError("");
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    previewWrap.classList.add("hidden");
+    videoPreview.removeAttribute("src");
+    imagePreview.removeAttribute("src");
+    imagePreview.classList.add("hidden");
+    videoPreview.classList.remove("hidden");
+    fileMeta.classList.add("hidden"); fileMeta.textContent = "";
+    uploadProgress.classList.add("hidden");
+    uploadPct.textContent = "0%"; uploadBar.style.width = "0%"; uploadEta.textContent = "";
+    resultBox.textContent = isImageMode ? "Upload an image and click Analyze image." : "Upload a video and click Analyze video.";
+    window.sessionStorage.removeItem("dfdc:lastResult");
+  }
+
+  function setFile(file) {
+    selectedFile = file;
+    setError("");
+    fileMeta.classList.remove("hidden");
+    fileMeta.textContent = `Selected: ${file.name} (${formatBytes(file.size)})`;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(file);
+    if (isImageMode) {
+      videoPreview.classList.add("hidden");
+      imagePreview.classList.remove("hidden");
+      imagePreview.src = previewUrl;
+    } else {
+      imagePreview.classList.add("hidden");
+      videoPreview.classList.remove("hidden");
+      videoPreview.src = previewUrl;
+    }
+    previewWrap.classList.remove("hidden");
+  }
+
+  dropzone.addEventListener("click", () => {
+    if (isImageMode) imageInput.click(); else fileInput.click();
+  });
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); });
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  fileInput.addEventListener("change",  (e) => { const f = e.target.files && e.target.files[0]; if (f) setFile(f); });
+  imageInput.addEventListener("change", (e) => { const f = e.target.files && e.target.files[0]; if (f) setFile(f); });
+  resetBtn.addEventListener("click", (e) => { e.preventDefault(); resetAll(); });
+
+  // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  analyzeBtn.addEventListener("click", async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!selectedFile) {
+      setError(isImageMode ? "Please choose an image file first." : "Please choose a video file first.");
+      return;
+    }
+
+    setError("");
+    uploadProgress.classList.remove("hidden");
+    uploadPct.textContent = "5%"; uploadBar.style.width = "5%";
+    uploadEta.textContent = isImageMode ? "Uploading and analyzing image..." : "Uploading and analyzing video...";
+
+    let pct = 5;
+    const timer = setInterval(() => {
+      pct = Math.min(90, pct + 7);
+      uploadPct.textContent = pct + "%";
+      uploadBar.style.width = pct + "%";
+    }, 350);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      let endpoint;
+      if (isImageMode) {
+        // Image mode â€” always dual stream, no frames param needed
+        endpoint = "{% url 'api_job_start_image' %}";
+      } else {
+        endpoint = "{% url 'api_job_start' %}";
+        const framesVal = framesInput.value.trim();
+        if (framesVal) formData.append("frames", framesVal);
+        if (useDualStream.checked) formData.append("use_dual_stream", "true");
+      }
+
+      const csrfToken = getCookie("csrftoken");
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+        headers: csrfToken ? { "X-CSRFToken": csrfToken } : {},
+      });
+
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); }
+      catch { throw new Error(`Non-JSON response (${res.status}): ${text}`); }
+      if (!res.ok) throw new Error(json.detail || `Request failed (${res.status}).`);
+
+      window.sessionStorage.setItem("dfdc:lastJobId", json.job_id);
+      uploadEta.textContent = "Job started. You can navigate to Pipeline / Reasoning while it runs.";
+      window.location.href = "{% url 'pipeline_explainability' %}";
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      clearInterval(timer);
+    }
+  });
+
+  // â”€â”€ Restore last result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const existing = window.sessionStorage.getItem("dfdc:lastResult");
+  if (existing) {
+    try { setResult(JSON.parse(existing)); } catch { }
+  }
+</script>
+{% endblock %}

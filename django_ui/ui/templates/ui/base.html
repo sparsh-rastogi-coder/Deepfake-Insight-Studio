@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Deepfake Insight Studio{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: radial-gradient(circle at top, #1f2937 0, #020617 45%, #000 100%);
+      }
+      .glass {
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+      .neon-border {
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3),
+          0 0 20px rgba(56, 189, 248, 0.35);
+      }
+      .neon-text {
+        text-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+      }
+      .pipeline-glow {
+        box-shadow: 0 0 15px rgba(94, 234, 212, 0.4);
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgba(148, 163, 184, 0.7);
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-slate-100 antialiased">
+    <div class="w-full max-w-6xl mx-auto px-4 py-6 lg:py-10 flex flex-col gap-6">
+      <header class="flex flex-wrap items-center justify-between gap-4 mb-2">
+        <div class="flex items-center gap-3">
+          <div class="relative w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center neon-border">
+            <span class="absolute inset-0 rounded-2xl bg-gradient-to-tr from-sky-500/30 via-cyan-400/20 to-fuchsia-500/30 blur-md"></span>
+            <span class="relative text-lg font-bold text-sky-100">DF</span>
+          </div>
+          <div>
+            <h1 class="text-xl md:text-2xl font-semibold tracking-tight text-slate-50">
+              Deepfake Insight Studio
+            </h1>
+            <p class="text-xs md:text-sm text-slate-400">
+              Upload a video, follow the pipeline, and explore the AI’s verdict.
+            </p>
+          </div>
+        </div>
+        <nav class="flex flex-wrap items-center gap-2 text-xs">
+          <a href="{% url 'upload_predict' %}" class="px-3 py-1.5 rounded-full border border-slate-700/80 bg-slate-900/70 hover:border-sky-400/70 hover:text-white transition">Upload & Predict</a>
+          <a href="{% url 'pipeline_explainability' %}" class="px-3 py-1.5 rounded-full border border-slate-700/80 bg-slate-900/70 hover:border-emerald-400/70 hover:text-white transition">Pipeline & Explainability</a>
+          <a href="{% url 'ai_reasoning' %}" class="px-3 py-1.5 rounded-full border border-slate-700/80 bg-slate-900/70 hover:border-violet-400/70 hover:text-white transition">AI Reasoning</a>
+        </nav>
+      </header>
+
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>
+

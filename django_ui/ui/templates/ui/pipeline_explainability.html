@@ -1,0 +1,305 @@
+{% extends "ui/base.html" %}
+{% block title %}Pipeline & Explainability | Deepfake Insight Studio{% endblock %}
+
+{% block content %}
+<main class="grid lg:grid-cols-[1fr,1fr] gap-6 items-start">
+  <section class="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <p class="text-sm font-medium uppercase tracking-[0.2em] text-emerald-400">Pipeline</p>
+        <h2 class="text-2xl font-semibold mt-1">Model Processing Steps</h2>
+      </div>
+      <span id="statusPill" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-slate-600/70 text-slate-300 bg-slate-800/60">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span id="statusText">Waiting for analysis</span>
+      </span>
+    </div>
+
+    <div id="steps" class="mt-2 grid sm:grid-cols-2 gap-3"></div>
+    <p class="text-[11px] text-slate-500">
+      This page visualizes the AI pipeline for transparency. It is UI-driven today; later it can be backed by real step events from the backend.
+    </p>
+  </section>
+
+  <section class="glass rounded-3xl p-6 lg:p-8 flex flex-col gap-4">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <p class="text-sm font-medium uppercase tracking-[0.2em] text-sky-400">Explainability</p>
+        <h2 class="text-2xl font-semibold mt-1">Frame-level analysis</h2>
+      </div>
+      <span class="text-[11px] text-slate-400 max-w-xs text-right">
+        Placeholder UI for future per-frame results.
+      </span>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="space-y-3">
+        <p class="text-xs text-slate-300">Extracted face thumbnails (mock data)</p>
+        <div id="frameGrid" class="grid grid-cols-2 gap-3"></div>
+      </div>
+      <div class="space-y-3">
+        <p class="text-xs text-slate-300">Per-frame contributions (mock data)</p>
+        <div class="overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/80">
+          <div class="grid grid-cols-3 text-[11px] font-medium text-slate-300 border-b border-slate-700/80">
+            <div class="px-3 py-2 border-r border-slate-700/80">Frame</div>
+            <div class="px-3 py-2 border-r border-slate-700/80">Prediction</div>
+            <div class="px-3 py-2">Confidence</div>
+          </div>
+          <div id="frameTable" class="max-h-40 overflow-y-auto scrollbar-thin"></div>
+        </div>
+        <p class="text-[11px] text-slate-500">
+          Later: show actual extracted frames, timestamps, and model scores returned by the backend.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const PIPELINE_STEPS = [
+    "Video uploaded",
+    "Extracting frames",
+    "Detecting faces",
+    "Preprocessing images",
+    "Running neural network inference",
+    "Aggregating predictions",
+    "Generating final result",
+  ];
+
+  const stepsEl = document.getElementById("steps");
+  const statusPill = document.getElementById("statusPill");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+
+  function stepCard(step, index, state) {
+    const isDone = state === "done";
+    const isActive = state === "active";
+
+    const border =
+      isActive ? "border-emerald-400/70 pipeline-glow" :
+      isDone ? "border-emerald-400/60" :
+      "border-slate-700/70";
+
+    const badge =
+      isActive ? "bg-emerald-500 text-slate-950" :
+      isDone ? "bg-sky-500 text-slate-950" :
+      "bg-slate-800 text-slate-300";
+
+    const badgeText = isDone ? "✓" : (index + 1);
+
+    return `
+      <div class="relative flex items-center gap-3 px-3.5 py-2.5 rounded-2xl border bg-slate-900/60 ${border}">
+        <div class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${badge}">
+          ${badgeText}
+        </div>
+        <div class="flex flex-col">
+          <span class="text-xs font-medium text-slate-100">${step}</span>
+          <span class="text-[11px] text-slate-500">${isActive ? "In progress..." : isDone ? "Completed" : "Pending"}</span>
+        </div>
+        ${isActive ? '<span class="absolute -right-1 -top-1 w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>' : ""}
+      </div>
+    `;
+  }
+
+  function renderPipeline(activeIndex, running) {
+    stepsEl.innerHTML = PIPELINE_STEPS.map((s, i) => {
+      const state = i < activeIndex ? "done" : i === activeIndex && running ? "active" : "pending";
+      return stepCard(s, i, state);
+    }).join("");
+  }
+
+  function setStatus(mode) {
+    if (mode === "running") {
+      statusPill.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-emerald-400/60 text-emerald-200 bg-emerald-500/10";
+      statusDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+      statusText.textContent = "Animating pipeline...";
+      return;
+    }
+    if (mode === "done") {
+      statusPill.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-sky-400/60 text-sky-200 bg-sky-500/10";
+      statusDot.className = "w-2 h-2 rounded-full bg-sky-400";
+      statusText.textContent = "Last result loaded";
+      return;
+    }
+    statusPill.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-slate-600/70 text-slate-300 bg-slate-800/60";
+    statusDot.className = "w-2 h-2 rounded-full bg-slate-500";
+    statusText.textContent = "Waiting for analysis";
+  }
+  const placeholderFrames = [
+    { id: 1, ts: "00:00:01.2", label: "Fake", conf: 0.92 },
+    { id: 2, ts: "00:00:02.8", label: "Fake", conf: 0.85 },
+    { id: 3, ts: "00:00:04.1", label: "Real", conf: 0.34 },
+    { id: 4, ts: "00:00:05.7", label: "Fake", conf: 0.78 },
+  ];
+
+  const frameGrid = document.getElementById("frameGrid");
+  const frameTable = document.getElementById("frameTable");
+
+  function renderPlaceholderExplainability() {
+    frameGrid.innerHTML = placeholderFrames.map((f) => `
+      <div class="relative rounded-xl border border-slate-700/80 bg-slate-900/70 p-2 flex flex-col gap-1">
+        <div class="aspect-video rounded-lg bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center text-[10px] text-slate-500">
+          Frame ${f.id} preview
+        </div>
+        <div class="flex items-center justify-between text-[11px] mt-1">
+          <span class="text-slate-300">${f.ts}</span>
+          <span class="px-1.5 py-0.5 rounded-full font-medium ${f.label === "Fake" ? "bg-rose-500/15 text-rose-300 border border-rose-500/40" : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"}">
+            ${f.label}
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span>Confidence</span>
+          <span>${Math.round(f.conf * 100)}%</span>
+        </div>
+        <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+          <div class="h-full ${f.label === "Fake" ? "bg-gradient-to-r from-amber-400 to-rose-500" : "bg-gradient-to-r from-emerald-400 to-sky-400"}" style="width:${Math.round(f.conf * 100)}%"></div>
+        </div>
+      </div>
+    `).join("");
+
+    frameTable.innerHTML = placeholderFrames.map((f) => `
+      <div class="grid grid-cols-3 text-[11px] text-slate-300 border-b border-slate-800/80 last:border-0">
+        <div class="px-3 py-2 border-r border-slate-800/80">${f.ts}</div>
+        <div class="px-3 py-2 border-r border-slate-800/80">${f.label}</div>
+        <div class="px-3 py-2">${Math.round(f.conf * 100)}%</div>
+      </div>
+    `).join("");
+  }
+
+  function hexToBase64(hex) {
+    if (!hex) return "";
+    const clean = hex.replace(/[^0-9a-fA-F]/g, "");
+    const bytes = [];
+    for (let i = 0; i < clean.length; i += 2) {
+      bytes.push(parseInt(clean.substring(i, i + 2), 16));
+    }
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  function renderExplainabilityFromResult(result) {
+    if (!result || !Array.isArray(result.frames) || result.frames.length === 0) {
+      renderPlaceholderExplainability();
+      return;
+    }
+
+    const frames = result.frames;
+    const preds = Array.isArray(result.stacked_pred) ? result.stacked_pred : [];
+
+    const combined = frames.map((hex, idx) => {
+      const p = preds[idx] || {};
+      const fakeProb = typeof p.fake_prob === "number"
+        ? p.fake_prob
+        : (result.probability_fake || 0.5);
+      const label = fakeProb >= 0.5 ? "Fake" : "Real";
+      return {
+        id: idx,
+        ts: `Frame ${idx}`,
+        label,
+        conf: fakeProb,
+        dataUrl: "data:image/jpeg;base64," + hexToBase64(hex),
+      };
+    });
+
+    frameGrid.innerHTML = combined.map((f) => `
+      <div class="relative rounded-xl border border-slate-700/80 bg-slate-900/70 p-2 flex flex-col gap-1">
+        <div class="aspect-video rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center">
+          <img src="${f.dataUrl}" alt="Frame ${f.id}" class="w-full h-full object-cover" />
+        </div>
+        <div class="flex items-center justify-between text-[11px] mt-1">
+          <span class="text-slate-300">${f.ts}</span>
+          <span class="px-1.5 py-0.5 rounded-full font-medium ${f.label === "Fake" ? "bg-rose-500/15 text-rose-300 border border-rose-500/40" : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"}">
+            ${f.label}
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span>Fake probability</span>
+          <span>${(Math.round(f.conf * 1000) / 10).toFixed(1)}%</span>
+        </div>
+        <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+          <div class="h-full ${f.label === "Fake" ? "bg-gradient-to-r from-amber-400 to-rose-500" : "bg-gradient-to-r from-emerald-400 to-sky-400"}" style="width:${Math.round(f.conf * 100)}%"></div>
+        </div>
+      </div>
+    `).join("");
+
+    frameTable.innerHTML = combined.map((f) => `
+      <div class="grid grid-cols-3 text-[11px] text-slate-300 border-b border-slate-800/80 last:border-0">
+        <div class="px-3 py-2 border-r border-slate-800/80">${f.ts}</div>
+        <div class="px-3 py-2 border-r border-slate-800/80">${f.label}</div>
+        <div class="px-3 py-2">${(Math.round(f.conf * 1000) / 10).toFixed(1)}%</div>
+      </div>
+    `).join("");
+  }
+  function getJobId() {
+    const url = new URL(window.location.href);
+    return url.searchParams.get("job") || window.sessionStorage.getItem("dfdc:lastJobId");
+  }
+
+  async function pollJob(jobId) {
+    setStatus("running");
+    let idx = 0;
+    renderPipeline(idx, true);
+
+    const anim = setInterval(() => {
+      idx = Math.min(idx + 1, PIPELINE_STEPS.length-1);
+      renderPipeline(idx, true);
+    }, 900);
+
+    try {
+      while (true) {
+        const res = await fetch(`/api/jobs/${jobId}/`, { method: "GET", credentials: "same-origin" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `Job status error (${res.status})`);
+
+        if (data.status === "done") {
+          clearInterval(anim);
+          renderPipeline(PIPELINE_STEPS.length , false);
+          setStatus("done");
+          if (data.result) {
+            window.sessionStorage.setItem("dfdc:lastResult", JSON.stringify(data.result));
+            renderExplainabilityFromResult(data.result);
+          }
+          return;
+        }
+
+        if (data.status === "error") {
+          clearInterval(anim);
+          renderPipeline(0, false);
+          setStatus("idle");
+          window.sessionStorage.setItem("dfdc:lastError", data.error || "Unknown error");
+          return;
+        }
+
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    } catch (e) {
+      clearInterval(anim);
+      renderPipeline(0, false);
+      setStatus("idle");
+      window.sessionStorage.setItem("dfdc:lastError", String(e));
+    }
+  }
+
+  const jobId = getJobId();
+    if (jobId) {
+      pollJob(jobId);
+    } else {
+      renderPipeline(0, false);
+      setStatus("idle");
+      const lastResult = window.sessionStorage.getItem("dfdc:lastResult");
+      if (lastResult) {
+        try {
+          renderExplainabilityFromResult(JSON.parse(lastResult));
+        } catch {
+          renderPlaceholderExplainability();
+        }
+      } else {
+        renderPlaceholderExplainability();
+      }
+    }
+</script>
+{% endblock %}
+
